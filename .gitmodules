@@ -1,0 +1,3 @@
+[submodule "MLIR.jl"]
+	path = MLIR.jl
+	url = git@github.com:jumerckx/MLIR.jl.git
