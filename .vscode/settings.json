@@ -1,0 +1,11 @@
+{
+    "julia.executablePath": "/home/jumerckx/julia/build/release/julia",
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#4B2211",
+        "titleBar.activeBackground": "#683018",
+        "titleBar.activeForeground": "#FEFBFA"
+    },
+    "files.associations": {
+        "random": "cpp"
+    }
+}

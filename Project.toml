@@ -1,0 +1,6 @@
+[deps]
+MLIR = "bfde9dd4-8f40-4a1e-be09-1475335e1c92"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+
+[extras]
+MLIR_jll = "a70bccb4-a5c0-5e2e-a329-e731972457e8"

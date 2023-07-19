@@ -1,0 +1,3 @@
+[MLIR_jll]
+mlir_c_path = "/home/jumerckx/brutus/build/lib/libStandaloneCAPITestLib.so"
+# mlir_c_path = "/home/jumerckx/julia/build/debug/standalone/lib/libStandaloneCAPITestLib.so"
