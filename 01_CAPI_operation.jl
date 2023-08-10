@@ -30,13 +30,9 @@ registry = registerAllDialects!(ctx)
 ### Create operation scaffolding ###
 state = Ref(API.mlirOperationStateGet("func.func", API.mlirLocationUnknownGet(ctx)))
 
-function API.MlirType(ctx::API.MlirContext, t)
-    return @ccall mlir_c.brutus_get_jlirtype(ctx::API.MlirContext, t::Any)::API.MlirType
-end
-
 argtypes = let
     argtypes = getfield(ir, :argtypes)
-    API.MlirType.(Ref(ctx), argtypes)
+    API.brutus_get_jlirtype.(Ref(ctx), argtypes)
 end
 
 reg = API.mlirRegionCreate()
@@ -45,26 +41,43 @@ entry_block = API.mlirBlockCreate(length(argtypes), argtypes, [API.mlirLocationU
 API.mlirRegionAppendOwnedBlock(reg, entry_block) # simple function only has one block, otherwise, more blocks would need to be added.
 API.mlirOperationStateAddOwnedRegions(state, 1, [reg])
 
-push!(block::API.MlirBlock, type::API.MlirType, loc::API.MlirLocation) =
+Base.push!(block::API.MlirBlock, type::API.MlirType, loc::API.MlirLocation) =
     API.mlirBlockAddArgument(block, type, loc)
 
 API.mlirBlockGetNumArguments(entry_block)
 
 ### Add statements to block ###
-push!(block::API.MlirBlock, op::API.MlirOperation) = 
+Base.push!(block::API.MlirBlock, op::API.MlirOperation) = 
     API.mlirBlockAppendOwnedOperation(block, op)
 
 add_op = IR.create_operation("jlir.add_int", API.mlirLocationUnknownGet(ctx); operands=[API.mlirBlockGetArgument(entry_block, 1), API.mlirBlockGetArgument(entry_block, 2)]) # "jlir.add_int"(<<UNKNOWN SSA VALUE>>, <<UNKNOWN SSA VALUE>>) : (!jlir.Int64, !jlir.Int64) -> !jlir.Int64
+@atomic add_op.owned = false
+add_op = add_op.operation
 
 named_val_attr = let 
     val_attr = @ccall mlir_c.brutus_get_jlirattr(ctx::API.MlirContext, 2::Any)::API.MlirAttribute
     API.mlirNamedAttributeGet(API.mlirIdentifierGet(ctx, "value"), val_attr)
 end
-constant_op = IR.create_operation("jlir.constant", API.mlirLocationUnknownGet(ctx); attributes=[named_val_attr], results=[API.MlirType(ctx, Int)]) # "jlir.constant"() {value = #jlir<2>} : () -> !jlir.Int64
+constant_op = IR.create_operation("jlir.constant", API.mlirLocationUnknownGet(ctx); attributes=[named_val_attr], results=[API.brutus_get_jlirtype(ctx, Int)]) # "jlir.constant"() {value = #jlir<2>} : () -> !jlir.Int64
+@atomic constant_op.owned = false
+constant_op = constant_op.operation
 
 mul_op = IR.create_operation("jlir.mul_int", API.mlirLocationUnknownGet(ctx); operands=[API.mlirOperationGetResult(constant_op, 0), API.mlirOperationGetResult(add_op, 0)])
+@atomic mul_op.owned = false
+mul_op = mul_op.operation
 
-ret_op = IR.create_operation("func.return", API.mlirLocationUnknownGet(ctx); operands=[API.mlirBlockGetArgument(entry_block, 2)], result_inference = false)
+####################
+IR.create_operation("jlir.mul_int", API.mlirLocationUnknownGet(ctx); operands=[API.mlirOperationGetResult(constant_op, 0), API.mlirOperationGetResult(add_op, 0)])
+API.brutus_get_jlirtype(isa(ctx, IR.Context) ? ctx.context : ctx, Int)
+IR.get_result(IR.create_operation("jlir.mul_int", API.mlirLocationUnknownGet(ctx); operands=[API.mlirOperationGetResult(constant_op, 0), API.mlirOperationGetResult(add_op, 0)]), 1).value |> API.mlirValueGetType
+####################
+
+
+# ret_op = IR.create_operation("func.return", API.mlirLocationUnknownGet(ctx); operands=[API.mlirBlockGetArgument(entry_block, 2)], result_inference = false)
+ret_op = IR.create_operation("func.return", API.mlirLocationUnknownGet(ctx); operands=[API.mlirOperationGetResult(mul_op, 0)], result_inference = false)
+@atomic ret_op.owned = false
+ret_op = ret_op.operation
+
 
 push!(entry_block, add_op)
 push!(entry_block, constant_op)
@@ -78,7 +91,7 @@ named_type_attr = let
     function_type = API.mlirFunctionTypeGet(
         ctx,
         length(input_values), API.mlirValueGetType.(input_values),
-        1, [API.MlirType(ctx, ret)])
+        1, [API.brutus_get_jlirtype(ctx, ret)])
         
     type_attr = API.mlirTypeAttrGet(function_type)
     
@@ -105,7 +118,7 @@ named_unit_attr = let
     API.mlirNamedAttributeGet(API.mlirIdentifierGet(ctx, "llvm.emit_c_interface"), unit_attr)
 end
 
-function push!(state::Base.RefValue{MLIR.API.MlirOperationState}, attr::IR.MlirNamedAttribute)
+function Base.push!(state::Base.RefValue{MLIR.API.MlirOperationState}, attr::IR.MlirNamedAttribute)
     API.mlirOperationStateAddAttributes(state, 1, Ref(attr))
 end
 
@@ -115,7 +128,7 @@ push!(state, named_viz_attr)
 push!(state, named_unit_attr)
 
 ### Create final operation and verify ###
-op = API.mlirOperationCreate(state)
+op = API.mlirOperationCreate(state);
 
 if (API.mlirOperationVerify(op)); @info "Operation was succesfully verified!"; end
 
@@ -134,7 +147,9 @@ function Base.show(io::IO, operation::API.MlirOperation)
     println(io)
 end
 
-@show op
+op
+test = IR.Operation(op)
+@show test
 #=
 func.func nested @f(%arg0: !jlir<typeof(Main.f)>, %arg1: !jlir.Int64, %arg2: !jlir.Int64) -> !jlir.Int64 attributes {llvm.emit_c_interface} {
   %0 = "jlir.add_int"(%arg1, %arg2) : (!jlir.Int64, !jlir.Int64) -> !jlir.Int64
